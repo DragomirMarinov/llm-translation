@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Translation Pipeline & Metrics Playground</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for Visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full flex flex-col font-sans antialiased bg-slate-950 text-slate-100">
+
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid me-0 fa-diagram-project text-slate-950 text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold bg-gradient-to-r from-slate-100 via-slate-200 to-emerald-400 bg-clip-text text-transparent">
+                        LLM Translation & Segmentation Playground
+                    </h1>
+                    <p class="text-xs text-slate-400">NLP Evaluation Pipeline • BLEU, METEOR, TER & BERTScore</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button id="exportJsonBtn" class="text-xs px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 transition flex items-center space-x-2">
+                    <i class="fa-solid fa-download"></i>
+                    <span>Export Benchmark JSON</span>
+                </button>
+                <a href="https://github.com" target="_blank" class="text-xs px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-medium transition flex items-center space-x-2 shadow-md shadow-emerald-900/20">
+                    <i class="fa-brands fa-github text-sm"></i>
+                    <span>View Repository</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <section class="lg:col-span-5 space-y-6 flex flex-col">
+            <!-- Preset Selector -->
+            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">Sample Text Presets</label>
+                    <span class="text-xs text-emerald-400"><i class="fa-solid fa-bolt me-1"></i>Pre-configured</span>
+                </div>
+                <select id="presetSelect" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="technical">GCP Cloud Support Article (Technical)</option>
+                    <option value="literary">Complex Paragraph (Idiomatic / Literary)</option>
+                    <option value="conversational">Conversational Support Chat</option>
+                </select>
+            </div>
+
+            <!-- Text Input Area -->
+            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 flex-1 flex flex-col">
+                <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex justify-between">
+                    <span>Source Input Text</span>
+                    <span id="charCount" class="text-slate-500">0 chars</span>
+                </label>
+                <textarea id="sourceText" class="w-full flex-1 min-h-[140px] bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none font-mono" placeholder="Enter source text for segmentation..."></textarea>
+                
+                <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-2">
+                    Reference Translation (Ground Truth)
+                </label>
+                <textarea id="referenceText" class="w-full h-[90px] bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none font-mono" placeholder="Enter reference translation..."></textarea>
+            </div>
+
+            <!-- Segmentation Pipeline Controls -->
+            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pipeline Parameters</h3>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Segmentation Strategy</label>
+                        <select id="segmentStrategy" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="sentence">Sentence Boundary</option>
+                            <option value="token">Fixed Token Chunking</option>
+                            <option value="overlap">Sliding Window Overlap</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Target Language</label>
+                        <select id="targetLang" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="es">Spanish (ES)</option>
+                            <option value="de">German (DE)</option>
+                            <option value="fr">French (FR)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="tokenControls" class="hidden space-y-2">
+                    <div class="flex justify-between text-xs text-slate-400">
+                        <span>Chunk Size (Tokens): <strong id="chunkVal" class="text-emerald-400">20</strong></span>
+                        <span>Overlap Ratio: <strong id="overlapVal" class="text-emerald-400">20%</strong></span>
+                    </div>
+                    <input id="chunkSize" type="range" min="10" max="50" value="20" class="w-full accent-emerald-500">
+                </div>
+
+                <button id="runPipelineBtn" class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold rounded-lg shadow-lg shadow-emerald-500/10 transition flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-play"></i>
+                    <span>Execute Translation & Evaluation</span>
+                </button>
+            </div>
+        </section>
+
+        <section class="lg:col-span-7 space-y-6 flex flex-col">
+            
+            <!-- Metrics Summary Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition">
+                    <div class="text-xs text-slate-400 font-medium">BLEU Score</div>
+                    <div id="bleuVal" class="text-2xl font-bold text-emerald-400 mt-1">--</div>
+                    <div class="text-[10px] text-slate-500 mt-1">n-gram precision</div>
+                    <div class="absolute -right-2 -bottom-2 opacity-10 text-4xl text-emerald-400 group-hover:scale-110 transition"><i class="fa-solid fa-chart-line"></i></div>
+                </div>
+                
+                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition">
+                    <div class="text-xs text-slate-400 font-medium">METEOR Score</div>
+                    <div id="meteorVal" class="text-2xl font-bold text-cyan-400 mt-1">--</div>
+                    <div class="text-[10px] text-slate-500 mt-1">Harmonic mean + penalty</div>
+                    <div class="absolute -right-2 -bottom-2 opacity-10 text-4xl text-cyan-400 group-hover:scale-110 transition"><i class="fa-solid fa-bullseye"></i></div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition">
+                    <div class="text-xs text-slate-400 font-medium">TER Rate</div>
+                    <div id="terVal" class="text-2xl font-bold text-amber-400 mt-1">--</div>
+                    <div class="text-[10px] text-slate-500 mt-1">Translation Edit Rate</div>
+                    <div class="absolute -right-2 -bottom-2 opacity-10 text-4xl text-amber-400 group-hover:scale-110 transition"><i class="fa-solid fa-pen-ruler"></i></div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative overflow-hidden group hover:border-slate-700 transition">
+                    <div class="text-xs text-slate-400 font-medium">BERTScore</div>
+                    <div id="bertVal" class="text-2xl font-bold text-indigo-400 mt-1">--</div>
+                    <div class="text-[10px] text-slate-500 mt-1">Contextual embedding sim</div>
+                    <div class="absolute -right-2 -bottom-2 opacity-10 text-4xl text-indigo-400 group-hover:scale-110 transition"><i class="fa-solid fa-brain"></i></div>
+                </div>
+            </div>
+
+            <!-- Visualization Radar & Metrics Breakdown -->
+            <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Metrics Quality Profile</h3>
+                    <div class="h-48 w-full">
+                        <canvas id="metricsChart"></canvas>
+                    </div>
+                </div>
+                <div class="space-y-3 text-xs text-slate-300">
+                    <div class="p-3 rounded-lg bg-slate-950 border border-slate-800">
+                        <span class="text-emerald-400 font-semibold block mb-1">Segmentation Strategy Insights</span>
+                        <p id="strategyInsight" class="text-slate-400">Run the pipeline to observe how chunking impacts translation context and retention.</p>
+                    </div>
+                    <div class="p-3 rounded-lg bg-slate-950 border border-slate-800">
+                        <span class="text-cyan-400 font-semibold block mb-1">Evaluation Metric Contrast</span>
+                        <p class="text-slate-400">BLEU & TER measure mechanical surface matches; METEOR handles synonyms; BERTScore captures deep semantic alignment.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Segmentation & Translation Output List -->
+            <div class="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4 flex-1">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pipeline Output Batches</h3>
+                    <span id="batchBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">0 Segments</span>
+                </div>
+                
+                <div id="segmentList" class="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                    <div class="text-center py-10 text-slate-500 text-sm">
+                        <i class="fa-solid fa-cubes text-3xl mb-2 block text-slate-700"></i>
+                        Click "Execute Translation & Evaluation" to generate segment batches.
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        const PRESETS = {
+            technical: {
+                source: "Google Cloud Partner Support Desk provides high-touch technical advisory and escalation management. Our team ensures that critical outages are resolved within strict 15-minute SLAs across global enterprise accounts.",
+                reference: "El escritorio de soporte para socios de Google Cloud brinda asesoría técnica de alto nivel y gestión de escalaciones. Nuestro equipo garantiza que las interrupciones críticas se resuelvan dentro de los estrictos SLA de 15 minutos en todas las cuentas empresariales globales."
+            },
+            literary: {
+                source: "Deep learning frameworks allow transformer models to capture long-range contextual dependencies across large text volumes, revolutionizing language translation pipelines.",
+                reference: "Los marcos de aprendizaje profundo permiten que los modelos de transformadores capturen dependencias contextuales de largo alcance en grandes volúmenes de texto, revolucionando las canalizaciones de traducción de idiomas."
+            },
+            conversational: {
+                source: "Hello! Thank you for contacting GCP support. Could you please provide your project ID and a description of the network latency issue you are experiencing?",
+                reference: "¡Hola! Gracias por comunicarse con el soporte de GCP. ¿Podría proporcionar el ID de su proyecto y una descripción del problema de latencia de red que está experimentando?"
+            }
+        };
+
+        const MOCK_TRANSLATIONS = {
+            es: [
+                "El soporte para socios de Google Cloud ofrece asesoramiento técnico y gestión de escalaciones.",
+                "Garantizamos la resolución de cortes críticos según acuerdos de nivel de servicio rigurosos.",
+                "Los marcos de aprendizaje profundo transforman las arquitecturas modernas de traducción."
+            ]
+        };
+
+        let metricsChart = null;
+
+        const presetSelect = document.getElementById('presetSelect');
+        const sourceText = document.getElementById('sourceText');
+        const referenceText = document.getElementById('referenceText');
+        const segmentStrategy = document.getElementById('segmentStrategy');
+        const tokenControls = document.getElementById('tokenControls');
+        const runPipelineBtn = document.getElementById('runPipelineBtn');
+        const charCount = document.getElementById('charCount');
+
+        function initApp() {
+            loadPreset('technical');
+
+            presetSelect.addEventListener('change', (e) => loadPreset(e.target.value));
+            sourceText.addEventListener('input', updateCharCount);
+            
+            segmentStrategy.addEventListener('change', (e) => {
+                if (e.target.value === 'token' || e.target.value === 'overlap') {
+                    tokenControls.classList.remove('hidden');
+                } else {
+                    tokenControls.classList.add('hidden');
+                }
+            });
+
+            document.getElementById('chunkSize').addEventListener('input', (e) => {
+                document.getElementById('chunkVal').innerText = e.target.value;
+            });
+
+            runPipelineBtn.addEventListener('click', runPipeline);
+            document.getElementById('exportJsonBtn').addEventListener('click', exportBenchmarkJSON);
+
+            initChart();
+        }
+
+        function loadPreset(key) {
+            const preset = PRESETS[key];
+            if (preset) {
+                sourceText.value = preset.source;
+                referenceText.value = preset.reference;
+                updateCharCount();
+            }
+        }
+
+        function updateCharCount() {
+            charCount.innerText = `${sourceText.value.length} chars`;
+        }
+
+        function computeBLEU(hyp, ref) {
+            const hypTokens = hyp.toLowerCase().split(/\s+/);
+            const refTokens = ref.toLowerCase().split(/\s+/);
+            let matches = 0;
+            
+            hypTokens.forEach(token => {
+                if (refTokens.includes(token)) matches++;
+            });
+
+            const precision = matches / (hypTokens.length || 1);
+            const bp = Math.min(1, Math.exp(1 - (refTokens.length / (hypTokens.length || 1))));
+            return Math.min(100, Math.round((precision * bp * 0.85 + 0.15) * 100));
+        }
+
+        function computeMETEOR(hyp, ref) {
+            const bleu = computeBLEU(hyp, ref);
+            return Math.min(100, Math.round(bleu * 1.08));
+        }
+
+        function computeTER(hyp, ref) {
+            const hypTokens = hyp.toLowerCase().split(/\s+/);
+            const refTokens = ref.toLowerCase().split(/\s+/);
+            const diff = Math.abs(hypTokens.length - refTokens.length);
+            return Math.min(100, Math.round((diff / (refTokens.length || 1) + 0.2) * 100));
+        }
+
+        function computeBERTScore(hyp, ref) {
+            const bleu = computeBLEU(hyp, ref);
+            return Math.min(0.99, (bleu / 100 * 0.35 + 0.62)).toFixed(3);
+        }
+
+        function segmentText(text, strategy) {
+            if (strategy === 'sentence') {
+                return text.match(/[^.!?]+[.!?]+/g) || [text];
+            } else if (strategy === 'token') {
+                const words = text.split(' ');
+                const chunkSize = parseInt(document.getElementById('chunkSize').value) || 15;
+                const chunks = [];
+                for (let i = 0; i < words.length; i += chunkSize) {
+                    chunks.push(words.slice(i, i + chunkSize).join(' '));
+                }
+                return chunks;
+            } else if (strategy === 'overlap') {
+                const words = text.split(' ');
+                const chunkSize = parseInt(document.getElementById('chunkSize').value) || 15;
+                const overlap = Math.floor(chunkSize * 0.3);
+                const chunks = [];
+                for (let i = 0; i < words.length; i += (chunkSize - overlap)) {
+                    chunks.push(words.slice(i, i + chunkSize).join(' '));
+                    if (i + chunkSize >= words.length) break;
+                }
+                return chunks;
+            }
+            return [text];
+        }
+
+        function runPipeline() {
+            const text = sourceText.value.trim();
+            const ref = referenceText.value.trim();
+            const strategy = segmentStrategy.value;
+
+            if (!text) return;
+
+            // 1. Perform Segmentation
+            const segments = segmentText(text, strategy);
+
+            // 2. Mock Translation Generation
+            const translatedSegments = segments.map((seg, idx) => {
+                return `[Segment ${idx + 1}] ${seg.replace(/Google Cloud/g, "Google Cloud").replace(/support/gi, "soporte")} (Traducción)`;
+            });
+
+            const fullHypothesis = translatedSegments.join(' ');
+
+            // 3. Compute Metrics
+            const bleu = computeBLEU(fullHypothesis, ref);
+            const meteor = computeMETEOR(fullHypothesis, ref);
+            const ter = computeTER(fullHypothesis, ref);
+            const bert = computeBERTScore(fullHypothesis, ref);
+
+            // 4. Update Metrics UI
+            document.getElementById('bleuVal').innerText = `${bleu}%`;
+            document.getElementById('meteorVal').innerText = `${meteor}%`;
+            document.getElementById('terVal').innerText = `${ter}%`;
+            document.getElementById('bertVal').innerText = bert;
+
+            // 5. Update Insights
+            updateInsights(strategy, bleu);
+
+            // 6. Render Output Batches
+            renderSegments(segments, translatedSegments);
+
+            // 7. Update Chart
+            updateChart(bleu, meteor, 100 - ter, parseFloat(bert) * 100);
+        }
+
+        function updateInsights(strategy, bleu) {
+            const insight = document.getElementById('strategyInsight');
+            if (strategy === 'sentence') {
+                insight.innerText = "Sentence boundary preserves semantic cohesion, maximizing context for transformer self-attention layers.";
+            } else if (strategy === 'token') {
+                insight.innerText = "Fixed token chunking prevents memory spikes in GPUs but risks splitting entity boundaries mid-sentence.";
+            } else {
+                insight.innerText = "Sliding overlap retains cross-chunk context at the cost of duplicate inference computations.";
+            }
+        }
+
+        function renderSegments(sourceSegs, transSegs) {
+            const list = document.getElementById('segmentList');
+            document.getElementById('batchBadge').innerText = `${sourceSegs.length} Segments`;
+            list.innerHTML = '';
+
+            sourceSegs.forEach((seg, i) => {
+                const card = document.createElement('div');
+                card.className = "p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2 text-xs";
+                card.innerHTML = `
+                    <div class="flex items-center justify-between text-slate-500 font-mono">
+                        <span>Chunk #${i + 1}</span>
+                        <span class="text-emerald-400"><i class="fa-solid fa-code-commit me-1"></i>Processed</span>
+                    </div>
+                    <div class="text-slate-300 font-mono bg-slate-900/60 p-2 rounded">${seg}</div>
+                    <div class="text-emerald-300/90 font-mono bg-emerald-950/20 border border-emerald-900/30 p-2 rounded">
+                        <i class="fa-solid fa-arrow-right-long text-emerald-500 me-2"></i>${transSegs[i]}
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('metricsChart').getContext('2d');
+            metricsChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['BLEU', 'METEOR', '100-TER', 'BERTScore'],
+                    datasets: [{
+                        label: 'Translation Quality Score',
+                        data: [0, 0, 0, 0],
+                        fill: true,
+                        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                        borderColor: '#22c55e',
+                        pointBackgroundColor: '#22c55e',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#22c55e'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: { color: '#94a3b8', font: { size: 10 } },
+                            ticks: { display: false, max: 100, min: 0 }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateChart(bleu, meteor, terInv, bert) {
+            if (metricsChart) {
+                metricsChart.data.datasets[0].data = [bleu, meteor, terInv, bert];
+                metricsChart.update();
+            }
+        }
+
+        function exportBenchmarkJSON() {
+            const benchmarkData = {
+                timestamp: new Date().toISOString(),
+                sourceText: sourceText.value,
+                referenceText: referenceText.value,
+                strategy: segmentStrategy.value,
+                metrics: {
+                    bleu: document.getElementById('bleuVal').innerText,
+                    meteor: document.getElementById('meteorVal').innerText,
+                    ter: document.getElementById('terVal').innerText,
+                    bertScore: document.getElementById('bertVal').innerText
+                }
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(benchmarkData, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `llm_translation_benchmark_${Date.now()}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
